@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Masters Fantasy Draft Board</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #111827;
+    --panel-2: #1f2937;
+    --line: #374151;
+    --text: #f3f4f6;
+    --muted: #9ca3af;
+    --accent: #16a34a;
+    --accent-2: #15803d;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; color: #111827; }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 20px; }
+  h1 { margin: 0 0 8px; font-size: 30px; }
+  .sub { color: #4b5563; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
+  .card { background: white; border: 1px solid #d1d5db; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+  .card h2 { margin: 0; padding: 14px 16px; font-size: 18px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+  .section { padding: 14px 16px; }
+  .teams { display: grid; gap: 8px; }
+  .team-row { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: center; }
+  input[type=text] { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; }
+  button { border: 0; background: var(--accent); color: white; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-weight: 700; }
+  button.secondary { background: #334155; }
+  button.warn { background: var(--warn); color: #111827; }
+  button.danger { background: var(--danger); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .meta { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .stat { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; }
+  .stat .label { color:#6b7280; font-size:12px; }
+  .stat .value { font-size:20px; font-weight:700; margin-top:2px; }
+  .main-grid { display:grid; grid-template-columns: minmax(560px, 1.2fr) minmax(320px, .8fr); gap:16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+  th { position: sticky; top: 0; background: #f9fafb; z-index: 1; }
+  .board-wrap { max-height: 78vh; overflow: auto; }
+  .board tr.active { background: #dcfce7; }
+  .board tr.done { color: #111827; }
+  .board .pick-num { font-weight: 700; }
+  .board .team-pill { display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; }
+  .board .player-name { font-weight:700; }
+  .board .placeholder { color:#9ca3af; }
+  .players-panel { display:flex; flex-direction:column; gap:10px; }
+  .players-list { max-height: 66vh; overflow:auto; border:1px solid #e5e7eb; border-radius:12px; }
+  .player-btn {
+    width: 100%; text-align: left; background: white; color: #111827; padding: 10px 12px;
+    border-radius: 0; border-bottom: 1px solid #f1f5f9; font-weight: 600;
+  }
+  .player-btn:hover { background: #f0fdf4; }
+  .muted { color:#6b7280; }
+  .hint { font-size: 12px; color:#6b7280; }
+  .rosters-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .roster-card { border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; }
+  .roster-head { background:#f9fafb; padding:10px 12px; font-weight:700; display:flex; justify-content:space-between; }
+  .roster-list { padding: 8px 12px 12px; min-height: 120px; }
+  .roster-list ol { margin: 0; padding-left: 20px; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  textarea { width:100%; min-height:120px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:12px; font-family: inherit; }
+  details summary { cursor:pointer; font-weight:700; }
+  @media (max-width: 1150px) {
+    .grid, .main-grid { grid-template-columns: 1fr; }
+    .rosters-grid { grid-template-columns: 1fr; }
+    .board-wrap, .players-list { max-height: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Masters Fantasy Draft Board</h1>
+  <div class="sub">Snake draft for 10 teams. Click a player to assign the current pick. Drafted players disappear automatically.</div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Setup & Controls</h2>
+      <div class="section">
+        <div class="teams" id="teamsEditor"></div>
+        <div class="toolbar">
+          <button id="undoBtn" class="secondary">Undo Last Pick</button>
+          <button id="exportCsvBtn">Export CSV</button>
+          <button id="exportJsonBtn" class="secondary">Backup JSON</button>
+          <button id="resetBtn" class="danger">Reset Draft</button>
+        </div>
+        <div class="meta">
+          <div class="stat"><div class="label">Current Pick</div><div class="value" id="currentPickStat">1</div></div>
+          <div class="stat"><div class="label">Remaining Golfers</div><div class="value" id="remainingStat">0</div></div>
+          <div class="stat"><div class="label">Rounds Shown</div><div class="value" id="roundsStat">0</div></div>
+        </div>
+        <div class="section" style="padding:14px 0 0;">
+          <details>
+            <summary>Edit player pool</summary>
+            <div style="margin-top:10px;" class="hint">One golfer per line. Save will rebuild the draft board.</div>
+            <textarea id="playersBox"></textarea>
+            <div class="toolbar">
+              <button id="savePlayersBtn">Save Player List</button>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="card">
+        <h2>Draft Board</h2>
+        <div class="section">
+          <div class="hint" id="currentPickLabel"></div>
+        </div>
+        <div class="board-wrap">
+          <table class="board">
+            <thead>
+              <tr><th>Rnd</th><th>Pick</th><th>Overall</th><th>Team</th><th>Player</th></tr>
+            </thead>
+            <tbody id="boardBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Available Players</h2>
+        <div class="section players-panel">
+          <input id="searchBox" type="text" placeholder="Search golfers..." />
+          <div class="hint">Click a golfer to assign the highlighted pick.</div>
+          <div class="players-list" id="playersList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:16px;"></div>
+
+  <div class="card">
+    <h2>Rosters</h2>
+    <div class="section">
+      <div class="rosters-grid" id="rostersGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const defaultTeams = ["Team 1", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8", "Team 9", "Team 10"];
+const defaultPlayers = ["Scottie Scheffler", "Rory McIlroy", "Jon Rahm", "Xander Schauffele", "Ludvig Aberg", "Collin Morikawa", "Brooks Koepka", "Viktor Hovland", "Patrick Cantlay", "Hideki Matsuyama", "Tommy Fleetwood", "Joaquin Niemann", "Justin Thomas", "Jordan Spieth", "Bryson DeChambeau", "Shane Lowry", "Min Woo Lee", "Will Zalatoris", "Sepp Straka", "Corey Conners", "Cameron Smith", "Russell Henley", "Sungjae Im", "Akshay Bhatia", "Tony Finau", "Robert MacIntyre", "Wyndham Clark", "Sam Burns", "Tyrrell Hatton", "Maverick McNealy", "Keegan Bradley", "Dustin Johnson", "Jason Day", "Matt Fitzpatrick", "Adam Scott", "Sahith Theegala", "Tom Kim", "Patrick Reed", "Cameron Young", "Daniel Berger", "Byeong Hun An", "Denny McCarthy", "J.T. Poston", "Harris English", "Si Woo Kim", "Billy Horschel", "Aaron Rai", "Brian Harman", "Nick Taylor", "Tom Hoge", "Lucas Glover", "Christiaan Bezuidenhout", "Taylor Pendrith", "Max Homa", "Nicolai Hojgaard", "Davis Thompson", "J.J. Spaun", "Thorbjorn Olesen", "Stephan Jaeger", "Michael Kim", "Rasmus Hojgaard", "Matthieu Pavon", "Mackenzie Hughes", "Nick Dunlap", "Austin Eckroat", "Patton Kizzire", "Joe Highsmith", "Davis Riley", "Cameron Davis", "Thomas Detry", "Jhonattan Vegas", "Max Greyserman", "Rafael Campos", "Brian Campbell", "Matt McCarty", "Kevin Yu", "Justin Hastings", "Jose Luis Ballester Barrio", "Hiroshi Tai", "Noah Kent", "Evan Beck", "Angel Cabrera", "Bernhard Langer", "Fred Couples", "Mike Weir", "Sergio Garcia", "Bubba Watson", "Phil Mickelson", "Charl Schwartzel", "Zach Johnson", "Danny Willett", "Jose Maria Olazabal", "Vijay Singh", "Adam Schenk", "Camilo Villegas", "Nico Echavarria"];
+const TEAM_COUNT = 10;
+const STORAGE_KEY = "masters-fantasy-draft-v1";
+
+function uniqueClean(list) {
+  const seen = new Set();
+  return list.map(v => (v || "").trim()).filter(Boolean).filter(v => {
+    const key = v.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildSnakeOrder(teamNames, totalPlayers) {
+  const rounds = Math.ceil(totalPlayers / TEAM_COUNT);
+  const board = [];
+  let overall = 1;
+  for (let round = 1; round <= rounds; round++) {
+    const order = round % 2 === 1 ? [...teamNames] : [...teamNames].reverse();
+    for (let i = 0; i < TEAM_COUNT && overall <= totalPlayers; i++) {
+      board.push({
+        round,
+        pickInRound: i + 1,
+        overall,
+        team: order[i],
+        player: ""
+      });
+      overall++;
+    }
+  }
+  return board;
+}
+
+function initialState() {
+  const teams = [...defaultTeams];
+  const players = [...defaultPlayers];
+  return {
+    teams,
+    players,
+    board: buildSnakeOrder(teams, players.length),
+    history: []
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return initialState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.teams) || !Array.isArray(parsed.players) || !Array.isArray(parsed.board)) {
+      return initialState();
+    }
+    return parsed;
+  } catch (e) {
+    return initialState();
+  }
+}
+
+let state = loadState();
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function currentPickIndex() {
+  return state.board.findIndex(p => !p.player);
+}
+
+function draftedSet() {
+  return new Set(state.board.map(p => p.player).filter(Boolean).map(v => v.toLowerCase()));
+}
+
+function remainingPlayers() {
+  const drafted = draftedSet();
+  return state.players.filter(p => !drafted.has(p.toLowerCase()));
+}
+
+function assignPlayer(player) {
+  const idx = currentPickIndex();
+  if (idx === -1) return;
+  const drafted = draftedSet();
+  if (drafted.has(player.toLowerCase())) return;
+  state.board[idx].player = player;
+  state.history.push({ index: idx, player });
+  saveState();
+  renderAll();
+}
+
+function undoLast() {
+  const last = state.history.pop();
+  if (!last) return;
+  if (state.board[last.index]) state.board[last.index].player = "";
+  saveState();
+  renderAll();
+}
+
+function resetDraft() {
+  const teams = state.teams.slice();
+  const players = state.players.slice();
+  state = {
+    teams,
+    players,
+    board: buildSnakeOrder(teams, players.length),
+    history: []
+  };
+  saveState();
+  renderAll();
+}
+
+function updateTeamNames() {
+  const inputs = [...document.querySelectorAll(".team-name-input")];
+  const teams = inputs.map(inp => inp.value.trim() || inp.dataset.defaultName);
+  const existingPlayers = state.board.map(p => p.player);
+  const newBoard = buildSnakeOrder(teams, state.players.length);
+  existingPlayers.forEach((name, i) => {
+    if (newBoard[i]) newBoard[i].player = name || "";
+  });
+  state.teams = teams;
+  state.board = newBoard;
+  saveState();
+  renderAll();
+}
+
+function savePlayersList() {
+  const list = uniqueClean(document.getElementById("playersBox").value.split(/\r?\n/));
+  if (!list.length) {
+    alert("Add at least one golfer.");
+    return;
+  }
+  const currentDrafted = state.board.map(p => p.player).filter(Boolean);
+  const missingDrafted = currentDrafted.filter(p => !list.some(v => v.toLowerCase() === p.toLowerCase()));
+  if (missingDrafted.length) {
+    alert("These already-drafted golfers are missing from the new list:\n\n" + missingDrafted.join("\n"));
+    return;
+  }
+  state.players = list;
+  const newBoard = buildSnakeOrder(state.teams, state.players.length);
+  currentDrafted.forEach((name, i) => {
+    if (newBoard[i]) newBoard[i].player = name;
+  });
+  state.board = newBoard;
+  state.history = currentDrafted.map((player, index) => ({ index, player }));
+  saveState();
+  renderAll();
+}
+
+function exportCsv() {
+  let rows = [["Round","Pick In Round","Overall Pick","Team","Player"]];
+  state.board.forEach(p => rows.push([p.round, p.pickInRound, p.overall, p.team, p.player || ""]));
+  const csv = rows.map(r => r.map(v => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(",")).join("\n");
+  downloadFile("masters_fantasy_draft_board.csv", "text/csv;charset=utf-8", csv);
+}
+
+function exportJson() {
+  downloadFile("masters_fantasy_draft_backup.json", "application/json;charset=utf-8", JSON.stringify(state, null, 2));
+}
+
+function downloadFile(filename, mime, content) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderTeamsEditor() {
+  const box = document.getElementById("teamsEditor");
+  box.innerHTML = "";
+  state.teams.forEach((team, idx) => {
+    const row = document.createElement("div");
+    row.className = "team-row";
+    row.innerHTML = `
+      <div><strong>${idx + 1}</strong></div>
+      <input class="team-name-input" type="text" value="${team.replace(/"/g, "&quot;")}" data-default-name="Team ${idx + 1}" />
+    `;
+    box.appendChild(row);
+  });
+  box.querySelectorAll("input").forEach(inp => inp.addEventListener("change", updateTeamNames));
+}
+
+function renderBoard() {
+  const tbody = document.getElementById("boardBody");
+  const active = currentPickIndex();
+  tbody.innerHTML = "";
+  state.board.forEach((pick, idx) => {
+    const tr = document.createElement("tr");
+    tr.className = idx === active ? "active" : (pick.player ? "done" : "");
+    tr.innerHTML = `
+      <td>${pick.round}</td>
+      <td>${pick.pickInRound}</td>
+      <td class="pick-num">${pick.overall}</td>
+      <td><span class="team-pill">${pick.team}</span></td>
+      <td>${pick.player ? `<span class="player-name">${pick.player}</span>` : `<span class="placeholder">Waiting for pick…</span>`}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  const label = document.getElementById("currentPickLabel");
+  if (active === -1) {
+    label.textContent = "Draft complete.";
+  } else {
+    const pick = state.board[active];
+    label.textContent = `On the clock: Overall Pick ${pick.overall} — ${pick.team}`;
+  }
+}
+
+function renderPlayers() {
+  const q = document.getElementById("searchBox").value.trim().toLowerCase();
+  const list = document.getElementById("playersList");
+  const available = remainingPlayers().filter(p => p.toLowerCase().includes(q));
+  list.innerHTML = "";
+  if (!available.length) {
+    const div = document.createElement("div");
+    div.className = "section muted";
+    div.textContent = "No golfers match that search.";
+    list.appendChild(div);
+    return;
+  }
+  available.forEach(player => {
+    const btn = document.createElement("button");
+    btn.className = "player-btn";
+    btn.textContent = player;
+    btn.disabled = currentPickIndex() === -1;
+    btn.addEventListener("click", () => assignPlayer(player));
+    list.appendChild(btn);
+  });
+}
+
+function renderRosters() {
+  const grid = document.getElementById("rostersGrid");
+  grid.innerHTML = "";
+  const byTeam = Object.fromEntries(state.teams.map(t => [t, []]));
+  state.board.forEach(p => { if (p.player) byTeam[p.team].push(p.player); });
+  state.teams.forEach(team => {
+    const card = document.createElement("div");
+    card.className = "roster-card";
+    const picks = byTeam[team];
+    card.innerHTML = `
+      <div class="roster-head"><span>${team}</span><span>${picks.length} golfer${picks.length === 1 ? "" : "s"}</span></div>
+      <div class="roster-list">
+        ${
+          picks.length
+            ? "<ol>" + picks.map(p => `<li>${p}</li>`).join("") + "</ol>"
+            : '<div class="muted">No golfers drafted yet.</div>'
+        }
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderMeta() {
+  const active = currentPickIndex();
+  document.getElementById("currentPickStat").textContent = active === -1 ? "Done" : state.board[active].overall;
+  document.getElementById("remainingStat").textContent = remainingPlayers().length;
+  document.getElementById("roundsStat").textContent = Math.ceil(state.players.length / TEAM_COUNT);
+  document.getElementById("undoBtn").disabled = !state.history.length;
+  document.getElementById("playersBox").value = state.players.join("\n");
+}
+
+function renderAll() {
+  renderTeamsEditor();
+  renderBoard();
+  renderPlayers();
+  renderRosters();
+  renderMeta();
+}
+
+document.getElementById("searchBox").addEventListener("input", renderPlayers);
+document.getElementById("undoBtn").addEventListener("click", undoLast);
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Reset the whole draft?")) resetDraft();
+});
+document.getElementById("savePlayersBtn").addEventListener("click", savePlayersList);
+document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+document.getElementById("exportJsonBtn").addEventListener("click", exportJson);
+
+renderAll();
+</script>
+</body>
+</html>
